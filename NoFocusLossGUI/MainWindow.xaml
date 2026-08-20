@@ -19,6 +19,7 @@
         <SolidColorBrush x:Key="AccentPressedBrush" Color="#006CBD"/>
         <SolidColorBrush x:Key="OrangeBrush"        Color="#C45911"/>
         <SolidColorBrush x:Key="CrimsonBrush"       Color="#C50F1F"/>
+        <SolidColorBrush x:Key="TealBrush"          Color="#038387"/>
         <SolidColorBrush x:Key="GreenBrush"         Color="#0D7A0D"/>
         <SolidColorBrush x:Key="GreenHoverBrush"    Color="#178A17"/>
         <SolidColorBrush x:Key="PurpleBrush"        Color="#744DA9"/>
@@ -108,6 +109,17 @@
         <!-- Crimson inject button (Exclude from Capture) -->
         <Style x:Key="CrimsonBtn" TargetType="Button">
             <Setter Property="Background"   Value="{StaticResource CrimsonBrush}"/>
+            <Setter Property="Foreground"   Value="White"/>
+            <Setter Property="Padding"      Value="18,10"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="Template"     Value="{StaticResource AccentBtnTpl}"/>
+        </Style>
+
+        <!-- Teal inject button (Screen Capture Protection) -->
+        <Style x:Key="TealBtn" TargetType="Button">
+            <Setter Property="Background"   Value="{StaticResource TealBrush}"/>
             <Setter Property="Foreground"   Value="White"/>
             <Setter Property="Padding"      Value="18,10"/>
             <Setter Property="FontSize"     Value="13"/>
@@ -339,6 +351,14 @@
                                 HorizontalAlignment="Stretch"
                                 Click="InjectPrivacy">
                             <TextBlock><Run Text="Exclude from Capture"/></TextBlock>
+                        </Button>
+
+                        <!-- Screen Capture Protection (blackout) -->
+                        <Button x:Name="BtnBlackout" Style="{StaticResource TealBtn}"
+                                Tag="&#xEA18;" Margin="0,8,0,0"
+                                HorizontalAlignment="Stretch"
+                                Click="InjectBlackout">
+                            <TextBlock><Run Text="Screen Capture Protection"/></TextBlock>
                         </Button>
                     </StackPanel>
                 </Grid>

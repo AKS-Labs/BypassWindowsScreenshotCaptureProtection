@@ -10,6 +10,10 @@
 #define WDA_NONE 0x00000000
 #endif
 
+#ifndef WDA_MONITOR
+#define WDA_MONITOR 0x00000001
+#endif
+
 #ifndef WDA_EXCLUDEFROMCAPTURE
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011
 #endif
@@ -55,9 +59,11 @@ static decltype(EmptyClipboard)*           real_Empty     = nullptr;
 
 static volatile LONG g_bypassActive  = 0;
 static volatile LONG g_privacyActive = 0;
+static volatile LONG g_blackoutActive = 0;
 static volatile LONG g_textCopyActive = 0;
 static HANDLE        g_bypassThread  = nullptr;
 static HANDLE        g_privacyThread = nullptr;
+static HANDLE        g_blackoutThread = nullptr;
 
 // ── UI Automation Helper ──────────────────────────────────────
 static void GetTextViaUIA(HWND owner) {
@@ -239,12 +245,13 @@ static void SetupFocusFix() {
         g_oldProc = (WNDPROC)SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)NewWndProc);
 }
 
-// ── Screen-capture affinity (shared by Bypass Screenshot & Exclude from Capture) ──
+// ── Screen-capture affinity (shared by Bypass Screenshot, Exclude from Capture & Screen Capture Protection) ──
 static BOOL WINAPI Detour_SWDA(HWND hWnd, DWORD) {
     if (real_SWDA) {
-        // Exclude-from-Capture wins if both are somehow active; otherwise follow Bypass.
-        if (InterlockedCompareExchange(&g_privacyActive, 0, 0)) real_SWDA(hWnd, WDA_EXCLUDEFROMCAPTURE);
-        else                                                     real_SWDA(hWnd, WDA_NONE);
+        // Blackout (WDA_MONITOR) > Exclude (WDA_EXCLUDEFROMCAPTURE) > Bypass (WDA_NONE)
+        if (InterlockedCompareExchange(&g_blackoutActive, 0, 0))      real_SWDA(hWnd, WDA_MONITOR);
+        else if (InterlockedCompareExchange(&g_privacyActive, 0, 0))  real_SWDA(hWnd, WDA_EXCLUDEFROMCAPTURE);
+        else                                                           real_SWDA(hWnd, WDA_NONE);
     }
     return TRUE;
 }
@@ -305,6 +312,32 @@ static void StopPrivacyProtection() {
     if (g_privacyThread) { WaitForSingleObject(g_privacyThread, 1500); CloseHandle(g_privacyThread); g_privacyThread = nullptr; }
 }
 
+// ── Screen capture protection (blackout) ──────────────────────
+static BOOL CALLBACK _BlackChild(HWND h, LPARAM) { SetWindowDisplayAffinity(h, WDA_MONITOR); return TRUE; }
+static void BlackoutAllWindows() {
+    DWORD pid = GetCurrentProcessId();
+    EnumWindows([](HWND h, LPARAM pid) -> BOOL {
+        DWORD wp = 0; GetWindowThreadProcessId(h, &wp);
+        if (wp == (DWORD)pid) { SetWindowDisplayAffinity(h, WDA_MONITOR); EnumChildWindows(h, _BlackChild, 0); }
+        return TRUE;
+    }, (LPARAM)pid);
+}
+static DWORD WINAPI BlackoutThread(LPVOID) {
+    while (InterlockedCompareExchange(&g_blackoutActive, 0, 0)) { BlackoutAllWindows(); Sleep(250); }
+    return 0;
+}
+static void StartBlackoutProtection() {
+    InstallSWDAHook();
+    InterlockedExchange(&g_blackoutActive, 1);
+    BlackoutAllWindows();
+    if (!g_blackoutThread)
+        g_blackoutThread = CreateThread(nullptr, 0, BlackoutThread, nullptr, 0, nullptr);
+}
+static void StopBlackoutProtection() {
+    InterlockedExchange(&g_blackoutActive, 0);
+    if (g_blackoutThread) { WaitForSingleObject(g_blackoutThread, 1500); CloseHandle(g_blackoutThread); g_blackoutThread = nullptr; }
+}
+
 // ── Init thread ───────────────────────────────────────────────
 static DWORD WINAPI InitThread(LPVOID) {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -327,9 +360,14 @@ static DWORD WINAPI InitThread(LPVOID) {
     h = OpenEventW(SYNCHRONIZE, FALSE, name);
     bool doPrivacy = h != nullptr; if (h) CloseHandle(h);
 
+    swprintf_s(name, 128, L"Local\\NFL_Blackout_%lu", GetCurrentProcessId());
+    h = OpenEventW(SYNCHRONIZE, FALSE, name);
+    bool doBlackout = h != nullptr; if (h) CloseHandle(h);
+
     if (doFocus)     SetupFocusFix();
     if (doBypass)    StartScreenshotBypass();
     if (doPrivacy)   StartPrivacyProtection();
+    if (doBlackout)  StartBlackoutProtection();
     if (doTextCopy)  EnableTextCopy();
     return 0;
 }
@@ -345,6 +383,7 @@ BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID) {
     else if (reason == DLL_PROCESS_DETACH) {
         StopScreenshotBypass();
         StopPrivacyProtection();
+        StopBlackoutProtection();
         InterlockedExchange(&g_textCopyActive, 0);
         if (g_hwnd && g_oldProc) SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)g_oldProc);
         MH_DisableHook(MH_ALL_HOOKS);

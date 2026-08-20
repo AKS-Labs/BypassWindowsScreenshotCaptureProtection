@@ -6,8 +6,9 @@ Mithya is a Windows DLL injection tool with several independent features:
 
 1. **Fix Focus Loss** — Prevents games/apps from pausing or muting when they lose focus
 2. **Bypass Screenshot** — Removes screenshot protection so capture tools (Snipping Tool, OCR, etc.) can see the window
-3. **Exclude from Capture** — Forces `WDA_EXCLUDEFROMCAPTURE` so the app appears black/blank in any capture or screen share
-4. **Enable Text Copy** — Lets you copy text from apps that block it
+3. **Exclude from Capture** — Forces `WDA_EXCLUDEFROMCAPTURE` so the window is removed from captures entirely (region shows what's behind it)
+4. **Screen Capture Protection** — Forces `WDA_MONITOR` so the window renders as a black rectangle in every capture/screen share
+5. **Enable Text Copy** — Lets you copy text from apps that block it
 
 ---
 
@@ -33,6 +34,7 @@ The GUI creates Windows Named Events in the Local namespace before injecting:
 | Fix Focus Loss | `Local\NFL_Focus_{PID}` |
 | Bypass Screenshot | `Local\NFL_Bypass_{PID}` |
 | Exclude from Capture | `Local\NFL_Privacy_{PID}` |
+| Screen Capture Protection | `Local\NFL_Blackout_{PID}` |
 | Enable Text Copy | `Local\NFL_TextCopy_{PID}` |
 
 These are signalled (set to `true`) so the DLL can open and read them.
@@ -59,6 +61,7 @@ DllMain (DLL_PROCESS_ATTACH)
             └── OpenEvent("Local\NFL_Focus_{PID}")   → SetupFocusFix()
             └── OpenEvent("Local\NFL_Bypass_{PID}")  → StartScreenshotBypass()
             └── OpenEvent("Local\NFL_Privacy_{PID}") → StartPrivacyProtection()
+            └── OpenEvent("Local\NFL_Blackout_{PID}")→ StartBlackoutProtection()
 ```
 
 > **Why a separate thread?** Doing complex operations directly in `DllMain` can deadlock because Windows holds the loader lock during DLL loading. Spawning a thread and waiting 100ms avoids this safely.
@@ -142,13 +145,33 @@ After injection, `ExcludeAllFromCapture()` enumerates all windows belonging to t
 
 **B. Hook `SetWindowDisplayAffinity`**
 
-Apps that try to clear protection (call with `WDA_NONE`) are intercepted — the detour always re-applies `WDA_EXCLUDEFROMCAPTURE` instead. The same hook serves both features: when privacy is active it forces `WDA_EXCLUDEFROMCAPTURE`, when screenshot-bypass is active it forces `WDA_NONE`, and if both flags were set privacy wins.
+Apps that try to clear protection (call with `WDA_NONE`) are intercepted — the detour always re-applies `WDA_EXCLUDEFROMCAPTURE` instead. The hook is shared across all capture-affinity features (see *Feature 4* for the full precedence: Blackout > Exclude-from-Capture > Bypass-Screenshot).
 
 **C. Background Keep-Alive Thread**
 
 Some apps periodically reset the affinity. A background thread re-applies `WDA_EXCLUDEFROMCAPTURE` every 250 ms for the lifetime of the injection.
 
 > **Note:** Exclude-from-Capture and Bypass-Screenshot are exact opposites. Pick **one** per process — the GUI moves the process to the *Injected* list after the first injection, so you'd have to unload before switching.
+
+---
+
+## Feature 4: Screen Capture Protection (Blackout)
+
+### The Problem
+
+Sometimes you want a capture to show a *blank/black* region where the app is — the classic DRM blackout — rather than removing the window entirely. `WDA_EXCLUDEFROMCAPTURE` removes the window from capture so the background shows through; that's not always desired.
+
+### The Solution
+
+The older `SetWindowDisplayAffinity(hwnd, WDA_MONITOR)` flag makes DWM render the window's area as a **black rectangle** in any capture while it keeps displaying normally on the real screen. Mithya force-applies it, same pattern as Features 2 and 3:
+
+**A. Force the flag on every window** — `BlackoutAllWindows()` enumerates all windows of the process (including children) and sets `WDA_MONITOR`.
+
+**B. Hook `SetWindowDisplayAffinity`** — any attempt by the app to clear or change the affinity is intercepted; the detour re-applies `WDA_MONITOR`. The detour precedence is Blackout > Exclude-from-Capture > Bypass-Screenshot.
+
+**C. Background Keep-Alive Thread** — re-applies `WDA_MONITOR` every 250 ms so apps that police/reset the flag lose.
+
+> **Note:** Blackout, Exclude-from-Capture and Bypass-Screenshot are mutually exclusive behaviours. Use **one** per process — the GUI only lets you inject once per process, so switching requires **Unload** first.
 
 ---
 
@@ -162,14 +185,17 @@ GUI Process                           Target Process
     ├─ CreateEvent("NFL_Focus_{PID}")       │
     ├─ CreateEvent("NFL_Bypass_{PID}")      │
     ├─ CreateEvent("NFL_Privacy_{PID}")     │
+    ├─ CreateEvent("NFL_Blackout_{PID}")    │
     ├─ Inject DLL ───────────────────────► │
     │                                      ├─ InitThread starts
     │                                      ├─ OpenEvent("NFL_Focus_{PID}")  ✓ found
     │                                      ├─ OpenEvent("NFL_Bypass_{PID}") ✓ found
     │                                      ├─ OpenEvent("NFL_Privacy_{PID}") ✓ found
+    │                                      ├─ OpenEvent("NFL_Blackout_{PID}") ✓ found
     │                                      ├─ SetupFocusFix()
     │                                      ├─ StartScreenshotBypass()
-    │                                      └─ StartPrivacyProtection()
+    │                                      ├─ StartPrivacyProtection()
+    │                                      └─ StartBlackoutProtection()
     ├─ Sleep 2000ms
     └─ CloseHandle (events auto-deleted by OS when no handles remain)
 ```
