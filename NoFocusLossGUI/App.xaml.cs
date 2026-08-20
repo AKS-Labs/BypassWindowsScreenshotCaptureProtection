@@ -13,5 +13,16 @@ namespace NoFocusLossGUI
     /// </summary>
     public partial class App : Application
     {
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            DispatcherUnhandledException += (s, args) =>
+            {
+                args.Handled = true;
+                MessageBox.Show("Mithya encountered an error and could not open.\n\n" + args.Exception.Message,
+                    "Mithya", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown();
+            };
+            base.OnStartup(e);
+        }
     }
 }
