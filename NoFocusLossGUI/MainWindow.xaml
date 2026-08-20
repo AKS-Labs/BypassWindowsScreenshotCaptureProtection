@@ -34,13 +34,51 @@
         <SolidColorBrush x:Key="ListHoverBrush"     Color="#0FFFFFFF"/>
         <SolidColorBrush x:Key="ListSelectedBrush"  Color="#260078D4"/>
 
+        <!-- ── Fluent-style tooltip (WinUI look): dark rounded card, wrapped text ── -->
+        <Style TargetType="ToolTip">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="Background" Value="#F22B2B2B"/>
+            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+            <Setter Property="BorderBrush" Value="#2AFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+            <Setter Property="MaxWidth" Value="320"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       MaxWidth="{TemplateBinding MaxWidth}"
+                                       TextWrapping="Wrap"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       LineHeight="18"
+                                       TextOptions.TextFormattingMode="Display"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ── Accent Button Template ── -->
         <!-- Fluent-style inject button: icon + label + info ("i") badge with tooltip.
              Hover brightens the border, press compresses, keyboard focus shows a focus ring. -->
         <ControlTemplate x:Key="AccentBtnTpl" TargetType="Button">
             <Border x:Name="Root" Background="{TemplateBinding Background}"
                     CornerRadius="8" Padding="{TemplateBinding Padding}"
-                    BorderBrush="#26FFFFFF" BorderThickness="1">
+                    BorderBrush="#26FFFFFF" BorderThickness="1"
+                    ToolTipService.InitialShowDelay="350"
+                    ToolTipService.BetweenShowDelay="0"
+                    ToolTipService.ShowDuration="15000"
+                    ToolTipService.ToolTip="{Binding (local:ButtonInfo.Text), RelativeSource={RelativeSource TemplatedParent}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -54,13 +92,10 @@
                                Foreground="{TemplateBinding Foreground}"/>
 
                     <ContentPresenter Grid.Column="1" VerticalAlignment="Center"
-                                      HorizontalAlignment="Left"/>
+                                      HorizontalAlignment="Center"/>
 
                     <Border Grid.Column="2" x:Name="InfoBadge" Width="18" Height="18"
-                            CornerRadius="9" Background="#26FFFFFF" VerticalAlignment="Center"
-                            ToolTipService.InitialShowDelay="350" ToolTipService.ShowDuration="15000"
-                            ToolTipService.BetweenShowDelay="0"
-                            ToolTipService.ToolTip="{Binding (local:ButtonInfo.Text), RelativeSource={RelativeSource TemplatedParent}}">
+                            CornerRadius="9" Background="#26FFFFFF" VerticalAlignment="Center">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Visible"/>
@@ -311,7 +346,8 @@
             <Grid Grid.Row="0" Margin="0,0,0,6">
                 <TextBlock Style="{StaticResource SectionHeader}" Text="AVAILABLE PROCESSES" VerticalAlignment="Center"/>
                 <Button Grid.Column="1" Style="{StaticResource SubtleBtn}" Tag="&#xE72C;"
-                        Content="Refresh" HorizontalAlignment="Right" Click="Refresh"/>
+                        Content="Refresh" HorizontalAlignment="Right" Click="Refresh"
+                        local:ButtonInfo.Text="Scan again for open, windowed processes."/>
             </Grid>
 
             <!-- Available list card -->
@@ -354,27 +390,27 @@
 
                     <TextBlock Grid.Row="0" Style="{StaticResource SectionHeader}" Text="INJECT INTO SELECTED PROCESS"/>
 
-                    <UniformGrid Grid.Row="2" Columns="3" Rows="2" HorizontalAlignment="Stretch">
+                    <UniformGrid Grid.Row="2" Columns="2" Rows="3" HorizontalAlignment="Stretch">
                         <!-- Fix Focus Loss -->
                         <Button x:Name="BtnFocus" Style="{StaticResource GreenBtn}"
                                 Tag="&#xE7FC;" Margin="3"
-                                local:ButtonInfo.Text="Stops the app from pausing, muting, or losing gamepad input when it is not the active window. Great for games and media when you alt-tab."
+                                local:ButtonInfo.Text="Keeps the app running, unmuted, and gamepad-ready while it is not the active window — alt-tab away without it pausing on you."
                                 Click="InjectFocus">
                             <TextBlock Text="Fix Focus Loss" VerticalAlignment="Center"/>
                         </Button>
 
-                        <!-- Bypass Screenshot -->
+                        <!-- Allow Screenshots -->
                         <Button x:Name="BtnScreenshot" Style="{StaticResource PurpleBtn}"
                                 Tag="&#xE722;" Margin="3"
-                                local:ButtonInfo.Text="Removes the app's black-screen protection so Snipping Tool, OCR (Win+Shift+T), and screen recorders can capture it again."
+                                local:ButtonInfo.Text="Some apps show a black screen in captures on purpose. This removes that so screenshots and recordings show the app again."
                                 Click="InjectScreenshot">
-                            <TextBlock Text="Bypass Screenshot" VerticalAlignment="Center"/>
+                            <TextBlock Text="Allow Screenshots" VerticalAlignment="Center"/>
                         </Button>
 
                         <!-- Enable Text Copy -->
                         <Button x:Name="BtnTextCopy" Style="{StaticResource OrangeBtn}"
                                 Tag="&#xE8C8;" Margin="3"
-                                local:ButtonInfo.Text="Lets you select and copy text in apps that usually block it. Works in browsers and protected fields using Ctrl+C and Ctrl+A."
+                                local:ButtonInfo.Text="Wakes up selection in apps that disable it, so Ctrl+C and Ctrl+A copy text like normal."
                                 Click="InjectTextCopy">
                             <TextBlock Text="Enable Text Copy" VerticalAlignment="Center"/>
                         </Button>
@@ -382,7 +418,7 @@
                         <!-- Exclude from Capture -->
                         <Button x:Name="BtnPrivacy" Style="{StaticResource CrimsonBtn}"
                                 Tag="&#xE72E;" Margin="3"
-                                local:ButtonInfo.Text="Hides this app completely from screenshots and screen sharing — the captured area shows whatever is behind it. The app stays fully visible on your screen."
+                                local:ButtonInfo.Text="Removes the app from screenshots and screen shares. Captures show what is behind it; you still see the app on screen."
                                 Click="InjectPrivacy">
                             <TextBlock Text="Exclude from Capture" VerticalAlignment="Center"/>
                         </Button>
@@ -390,7 +426,7 @@
                         <!-- Blackout in Captures -->
                         <Button x:Name="BtnBlackout" Style="{StaticResource TealBtn}"
                                 Tag="&#xEA18;" Margin="3"
-                                local:ButtonInfo.Text="Shows a plain black rectangle over this app in every screenshot and screen share (DRM style), while the app stays fully visible on your screen."
+                                local:ButtonInfo.Text="Makes the app appear as a plain black rectangle in captures, like DRM video, while it looks normal on your screen."
                                 Click="InjectBlackout">
                             <TextBlock Text="Blackout in Captures" VerticalAlignment="Center"/>
                         </Button>
@@ -398,9 +434,9 @@
                         <!-- All Features -->
                         <Button x:Name="BtnBoth" Style="{StaticResource BlueBtn}"
                                 Tag="&#xE734;" Margin="3"
-                                local:ButtonInfo.Text="Applies Fix Focus Loss, Bypass Screenshot, and Enable Text Copy in a single click."
+                                local:ButtonInfo.Text="One click for all three: Fix Focus Loss, Allow Screenshots, and Enable Text Copy. Capture hiding stays manual on purpose."
                                 Click="InjectBoth">
-                            <TextBlock Text="All Features" VerticalAlignment="Center"/>
+                            <TextBlock Text="Apply All Fixes" VerticalAlignment="Center"/>
                         </Button>
                     </UniformGrid>
 
@@ -413,7 +449,8 @@
             <Grid Grid.Row="3" Margin="0,0,0,6">
                 <TextBlock Style="{StaticResource SectionHeader}" Text="INJECTED PROCESSES" VerticalAlignment="Center"/>
                 <Button Style="{StaticResource SubtleBtn}" Tag="&#xE74D;"
-                        Content="Unload" HorizontalAlignment="Right" Click="Unload"/>
+                        Content="Unload" HorizontalAlignment="Right" Click="Unload"
+                        local:ButtonInfo.Text="Remove Mithya from the selected process and restore its screen to normal."/>
             </Grid>
 
             <!-- Injected list card -->

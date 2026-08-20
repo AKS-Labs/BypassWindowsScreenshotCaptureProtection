@@ -5,7 +5,7 @@
 Mithya is a Windows DLL injection tool with several independent features:
 
 1. **Fix Focus Loss** — Prevents games/apps from pausing or muting when they lose focus
-2. **Bypass Screenshot** — Removes screenshot protection so capture tools (Snipping Tool, OCR, etc.) can see the window
+2. **Allow Screenshots** (button: *Allow Screenshots*) — Removes screenshot protection so capture tools (Snipping Tool, OCR, etc.) can see the window
 3. **Exclude from Capture** — Forces `WDA_EXCLUDEFROMCAPTURE` so the window is removed from captures entirely (region shows what's behind it)
 4. **Screen Capture Protection** — Forces `WDA_MONITOR` so the window renders as a black rectangle in every capture/screen share
 5. **Enable Text Copy** — Lets you copy text from apps that block it
@@ -32,7 +32,7 @@ The GUI creates Windows Named Events in the Local namespace before injecting:
 | Feature | Named Event |
 |---|---|
 | Fix Focus Loss | `Local\NFL_Focus_{PID}` |
-| Bypass Screenshot | `Local\NFL_Bypass_{PID}` |
+| Allow Screenshots | `Local\NFL_Bypass_{PID}` |
 | Exclude from Capture | `Local\NFL_Privacy_{PID}` |
 | Screen Capture Protection | `Local\NFL_Blackout_{PID}` |
 | Enable Text Copy | `Local\NFL_TextCopy_{PID}` |
@@ -99,7 +99,7 @@ All other messages pass through to the original WndProc normally.
 
 ---
 
-## Feature 2: Bypass Screenshot Protection
+## Feature 2: Allow Screenshots (formerly Bypass Screenshot Protection)
 
 ### The Problem
 
@@ -234,13 +234,14 @@ While focus fix is active and the app captures the mouse, dragging/minimizing/cl
 ## Unloading / Cleanup
 
 When you click **Unload**:
-1. `DLL_PROCESS_DETACH` fires inside the target
-2. The background bypass thread is stopped (`g_bypassActive = 0`, thread joins)
-3. The original `WndProc` is restored via `SetWindowLongPtr`
-4. All MinHook hooks are disabled and uninitialized
-5. The DLL is freed from the process by calling `FreeLibrary`
+1. The GUI asks the target process to free the DLL via `FreeLibraryAndExitThread`, which fires `DLL_PROCESS_DETACH` inside the target
+2. All keep-alive threads (bypass / privacy / blackout) are stopped and joined
+3. Every window and child window has its capture affinity reset to `WDA_NONE` — the screen is fully restored
+4. Text-copy window subclasses are removed and the original `WndProc` is restored via `SetWindowLongPtrW`
+5. All MinHook hooks are disabled and uninitialized, then `CoUninitialize` runs
+6. The DLL is fully unmapped from the process
 
-The target process returns to its original state.
+The target process returns to its original state. The GUI only moves the process back to the list if the unload call actually succeeded.
 
 ---
 

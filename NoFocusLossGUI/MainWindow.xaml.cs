@@ -153,10 +153,19 @@ namespace NoFocusLossGUI
             }
 
             PeFile dll = selected.Is64Bit ? Dll64 : Dll32;
-            Injector.Unload(selected, dll);
+            bool ok = false;
+            try { ok = Injector.Unload(selected, dll); }
+            catch (Exception ex) { SetStatus($"⚠ Failed to unload from {selected}: {ex.Message}"); return; }
+
+            if (!ok)
+            {
+                SetStatus($"⚠ Could not find the injected module in {selected} — it may have already been removed");
+                return;
+            }
+
             InjectedProcesses.Items.Remove(selected);
             Processes.Items.Add(selected);
-            SetStatus($"Unloaded from {selected}");
+            SetStatus($"✓ Unloaded from {selected} — hooks removed and the screen was restored");
         }
 
         // ── Helpers ───────────────────────────────────────────────────

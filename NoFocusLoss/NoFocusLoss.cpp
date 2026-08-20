@@ -204,6 +204,27 @@ static void EnableTextCopy() {
     }
 }
 
+static BOOL CALLBACK UnsubclassChild(HWND h, LPARAM) {
+    WNDPROC orig = (WNDPROC)(LONG_PTR)GetPropW(h, L"NFL_Orig");
+    if (orig) {
+        SetWindowLongPtrW(h, GWLP_WNDPROC, (LONG_PTR)orig);
+        RemovePropW(h, L"NFL_Orig");
+    }
+    EnumChildWindows(h, UnsubclassChild, 0);
+    return TRUE;
+}
+
+static void DisableTextCopy() {
+    InterlockedExchange(&g_textCopyActive, 0);
+    DWORD pid = GetCurrentProcessId();
+    EnumWindows([](HWND h, LPARAM pid) -> BOOL {
+        DWORD wp = 0; GetWindowThreadProcessId(h, &wp);
+        if (wp == (DWORD)pid) { UnsubclassChild(h, 0); EnumChildWindows(h, UnsubclassChild, 0); }
+        return TRUE;
+    }, (LPARAM)pid);
+    UnsubclassChild(g_hwnd, 0);
+}
+
 // ── Focus-loss detours ────────────────────────────────────────
 static HWND WINAPI Detour_GFW()             { return g_hwnd; }
 static BOOL WINAPI Detour_SCP(int X, int Y) { return g_unfocused ? TRUE : real_SCP(X, Y); }
@@ -385,7 +406,11 @@ BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID) {
         StopPrivacyProtection();
         StopBlackoutProtection();
         InterlockedExchange(&g_textCopyActive, 0);
-        if (g_hwnd && g_oldProc) SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)g_oldProc);
+
+        StripAllProtection();
+        DisableTextCopy();
+        if (g_hwnd && g_oldProc) SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, (LONG_PTR)g_oldProc);
+
         MH_DisableHook(MH_ALL_HOOKS);
         MH_Uninitialize();
         CoUninitialize();
