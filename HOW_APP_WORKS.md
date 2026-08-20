@@ -9,6 +9,7 @@ Mithya is a Windows DLL injection tool with several independent features:
 3. **Exclude from Capture** — Forces `WDA_EXCLUDEFROMCAPTURE` so the window is removed from captures entirely (region shows what's behind it)
 4. **Screen Capture Protection** — Forces `WDA_MONITOR` so the window renders as a black rectangle in every capture/screen share
 5. **Enable Text Copy** — Lets you copy text from apps that block it
+6. **Kill Kiosk** — Fakes the desktop APIs so the app believes it created and switched to a locked "kiosk desktop", but nothing is actually created
 
 ---
 
@@ -36,6 +37,7 @@ The GUI creates Windows Named Events in the Local namespace before injecting:
 | Exclude from Capture | `Local\NFL_Privacy_{PID}` |
 | Screen Capture Protection | `Local\NFL_Blackout_{PID}` |
 | Enable Text Copy | `Local\NFL_TextCopy_{PID}` |
+| Kill Kiosk | `Local\NFL_KillKiosk_{PID}` |
 
 These are signalled (set to `true`) so the DLL can open and read them.
 
@@ -175,6 +177,28 @@ The older `SetWindowDisplayAffinity(hwnd, WDA_MONITOR)` flag makes DWM render th
 
 ---
 
+## Feature 5: Kill Kiosk
+
+### The Problem
+
+Some apps (kiosk players, "self-service" launchers) switch into their own **desktop** when they start: they call `CreateDesktopW("kiosk", ...)` and then `SwitchDesktop`, which locks the entire session to that hidden desktop and hides everything else. The user is trapped until the app switches back.
+
+### The Solution
+
+Rather than blocking the kiosk (which would make the app crash or show an error), Mithya makes the app **believe it succeeded** while never creating anything:
+
+- **`CreateDesktopW` / `CreateDesktopExW` are hooked** — instead of creating a new desktop, the call returns a handle to the **current, real desktop** (`OpenInputDesktop`). The app sees a valid `HDESK`, so it assumes everything went as planned.
+- **`OpenDesktopW` is hooked** — if the app re-opens the desktop by name, it gets the same fake handle.
+- **`SwitchDesktop` is hooked** — a switch to the fake handle returns `TRUE` without actually switching. The session never moves to a hidden desktop.
+- **`CloseDesktop` is hooked** — closing the fake handle is a no-op, so the real desktop reference is never damaged.
+- **`GetUserObjectInformationW` is hooked** — a name query returns the kiosk desktop name the app chose, so even name checks look consistent.
+
+Result: the app keeps running on your normal desktop, fully visible, while believing it is safely isolated inside its kiosk desktop. Because nothing is actually created, unload needs no extra cleanup — the hooks simply stop.
+
+> **Note:** Use one feature per process — the GUI moves the process to the *Injected* list after injection, so switching features requires **Unload** first.
+
+---
+
 ## How Named Event IPC Works
 
 The GUI and DLL communicate through the Windows kernel object namespace:
@@ -186,16 +210,19 @@ GUI Process                           Target Process
     ├─ CreateEvent("NFL_Bypass_{PID}")      │
     ├─ CreateEvent("NFL_Privacy_{PID}")     │
     ├─ CreateEvent("NFL_Blackout_{PID}")    │
+    ├─ CreateEvent("NFL_KillKiosk_{PID}")   │
     ├─ Inject DLL ───────────────────────► │
     │                                      ├─ InitThread starts
     │                                      ├─ OpenEvent("NFL_Focus_{PID}")  ✓ found
     │                                      ├─ OpenEvent("NFL_Bypass_{PID}") ✓ found
     │                                      ├─ OpenEvent("NFL_Privacy_{PID}") ✓ found
     │                                      ├─ OpenEvent("NFL_Blackout_{PID}") ✓ found
+    │                                      ├─ OpenEvent("NFL_KillKiosk_{PID}") ✓ found
     │                                      ├─ SetupFocusFix()
     │                                      ├─ StartScreenshotBypass()
     │                                      ├─ StartPrivacyProtection()
-    │                                      └─ StartBlackoutProtection()
+    │                                      ├─ StartBlackoutProtection()
+    │                                      └─ StartKillKiosk()
     ├─ Sleep 2000ms
     └─ CloseHandle (events auto-deleted by OS when no handles remain)
 ```

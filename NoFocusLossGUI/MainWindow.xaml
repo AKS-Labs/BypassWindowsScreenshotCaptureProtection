@@ -21,6 +21,7 @@
         <SolidColorBrush x:Key="OrangeBrush"        Color="#C45911"/>
         <SolidColorBrush x:Key="CrimsonBrush"       Color="#C50F1F"/>
         <SolidColorBrush x:Key="TealBrush"          Color="#038387"/>
+        <SolidColorBrush x:Key="IndigoBrush"        Color="#4F43AE"/>
         <SolidColorBrush x:Key="GreenBrush"         Color="#0D7A0D"/>
         <SolidColorBrush x:Key="GreenHoverBrush"    Color="#178A17"/>
         <SolidColorBrush x:Key="PurpleBrush"        Color="#744DA9"/>
@@ -193,6 +194,17 @@
         <!-- Teal inject button (Blackout in Captures) -->
         <Style x:Key="TealBtn" TargetType="Button">
             <Setter Property="Background"   Value="{StaticResource TealBrush}"/>
+            <Setter Property="Foreground"   Value="White"/>
+            <Setter Property="Padding"      Value="18,10"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="Template"     Value="{StaticResource AccentBtnTpl}"/>
+        </Style>
+
+        <!-- Indigo inject button (Kill Kiosk) -->
+        <Style x:Key="IndigoBtn" TargetType="Button">
+            <Setter Property="Background"   Value="{StaticResource IndigoBrush}"/>
             <Setter Property="Foreground"   Value="White"/>
             <Setter Property="Padding"      Value="18,10"/>
             <Setter Property="FontSize"     Value="13"/>
@@ -386,6 +398,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0" Style="{StaticResource SectionHeader}" Text="INJECT INTO SELECTED PROCESS"/>
@@ -431,16 +445,24 @@
                             <TextBlock Text="Blackout in Captures" VerticalAlignment="Center"/>
                         </Button>
 
-                        <!-- All Features -->
-                        <Button x:Name="BtnBoth" Style="{StaticResource BlueBtn}"
-                                Tag="&#xE734;" Margin="3"
-                                local:ButtonInfo.Text="One click for all three: Fix Focus Loss, Allow Screenshots, and Enable Text Copy. Capture hiding stays manual on purpose."
-                                Click="InjectBoth">
-                            <TextBlock Text="Apply All Fixes" VerticalAlignment="Center"/>
+                        <!-- Kill Kiosk -->
+                        <Button x:Name="BtnKillKiosk" Style="{StaticResource IndigoBtn}"
+                                Tag="&#xE785;" Margin="3"
+                                local:ButtonInfo.Text="Some apps switch into a locked 'kiosk' desktop when they start. This makes them believe they did, while they keep running on your normal desktop instead."
+                                Click="InjectKillKiosk">
+                            <TextBlock Text="Kill Kiosk" VerticalAlignment="Center"/>
                         </Button>
                     </UniformGrid>
 
-                    <TextBlock Grid.Row="4" Text="Hover the ⓘ icon on any button for a short explanation."
+                    <!-- All Features (full-width primary) -->
+                    <Button Grid.Row="4" x:Name="BtnBoth" Style="{StaticResource BlueBtn}"
+                            Tag="&#xE734;" Margin="3"
+                            local:ButtonInfo.Text="One click — Fix Focus Loss, Allow Screenshots, Enable Text Copy, and Kill Kiosk. Exclude from Capture and Blackout stay separate on purpose."
+                            Click="InjectBoth">
+                        <TextBlock Text="Apply All Fixes" VerticalAlignment="Center"/>
+                    </Button>
+
+                    <TextBlock Grid.Row="6" Text="Hover the ⓘ icon on any button for a short explanation."
                                FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="3,0,0,0"/>
                 </Grid>
             </Border>

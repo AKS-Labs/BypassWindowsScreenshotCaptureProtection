@@ -16,6 +16,7 @@
 | 📷 **Allow Screenshots** | Removes the black-screen protection so Snipping Tool, OCR (`Win+Shift+T`), and screen recorders can capture the window |
 | 🔒 **Exclude from Capture** | Privacy: removes the window from captures entirely (region shows what's behind it) while it stays visible on screen |
 | 🛡 **Blackout in Captures** | Shows a black rectangle over the app in every capture/screen share (classic DRM style) while it stays visible on screen |
+| 🔓 **Kill Kiosk** | Lets apps believe they locked into a "kiosk desktop" while they actually keep running on your normal desktop |
 | 📋 **Enable Text Copy** | Lets you copy text from apps that block it (Ctrl+C on protected fields/browsers) |
 | ✨ **Apply All Fixes** | Applies focus fix + screenshot bypass + text copy at once |
 
@@ -47,8 +48,9 @@ SharpestInjector.dll    ← Injector library (don't move)
    - 🟣 **Allow Screenshots** — removes black-screen capture protection
    - 🔴 **Exclude from Capture** — makes the app "invisible" in screenshots/screen-sharing (behind-content shows through)
    - 🛡 **Blackout in Captures** — makes the app show as a **black box** in screenshots/screen-sharing
+   - 🔓 **Kill Kiosk** — lets kiosk-style apps believe they trapped themselves on a separate desktop
    - 🟠 **Enable Text Copy** — copies text from apps that block selection/copying
-   - 🔵 **Apply All Fixes** — applies focus fix, screenshot bypass, and text copy at once
+   - 🔵 **Apply All Fixes** — applies focus fix, screenshot bypass, text copy, and kiosk kill at once
 5. To revert, select the process in the bottom list and click **Unload**
 
 ---

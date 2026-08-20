@@ -359,6 +359,102 @@ static void StopBlackoutProtection() {
     if (g_blackoutThread) { WaitForSingleObject(g_blackoutThread, 1500); CloseHandle(g_blackoutThread); g_blackoutThread = nullptr; }
 }
 
+// ── Kill Kiosk (fake "kiosk desktop") ─────────────────────────
+// When active, the target believes it created and switched to its own
+// locked kiosk desktop, but in reality nothing is created and it keeps
+// running on the normal, fully visible desktop.
+static volatile LONG g_killKioskActive   = 0;
+static HDESK         g_fakeDesktop       = nullptr;
+static wchar_t       g_fakeDesktopName[64] = L"";
+
+static decltype(CreateDesktopW)*            real_CreateDesktopW   = nullptr;
+static decltype(CreateDesktopExW)*          real_CreateDesktopExW = nullptr;
+static decltype(OpenDesktopW)*              real_OpenDesktopW     = nullptr;
+static decltype(CloseDesktop)*              real_CloseDesktop     = nullptr;
+static decltype(SwitchDesktop)*             real_SwitchDesktop    = nullptr;
+static decltype(GetUserObjectInformationW)* real_GUOIW            = nullptr;
+
+static HDESK FakeDesktop(const wchar_t* name) {
+    if (name && *name) wcsncpy_s(g_fakeDesktopName, 64, name, 63);
+    if (!g_fakeDesktop) {
+        g_fakeDesktop = OpenInputDesktop(0, FALSE,
+            DESKTOP_SWITCHDESKTOP | DESKTOP_CREATEWINDOW | DESKTOP_WRITEOBJECTS | DESKTOP_READOBJECTS);
+        if (!g_fakeDesktop) g_fakeDesktop = GetThreadDesktop(GetCurrentThreadId());
+    }
+    return g_fakeDesktop;
+}
+
+static HDESK WINAPI Detour_CreateDesktopW(
+    LPCWSTR name, LPCWSTR device, DEVMODEW* dm, DWORD flags,
+    ACCESS_MASK access, LPSECURITY_ATTRIBUTES sa) {
+    if (InterlockedCompareExchange(&g_killKioskActive, 0, 0))
+        return FakeDesktop(name);
+    return real_CreateDesktopW(name, device, dm, flags, access, sa);
+}
+
+static HDESK WINAPI Detour_CreateDesktopExW(
+    LPCWSTR name, LPCWSTR device, DEVMODEW* dm, DWORD flags,
+    ACCESS_MASK access, LPSECURITY_ATTRIBUTES sa, ULONG heap, PVOID pvoid) {
+    if (InterlockedCompareExchange(&g_killKioskActive, 0, 0))
+        return FakeDesktop(name);
+    return real_CreateDesktopExW(name, device, dm, flags, access, sa, heap, pvoid);
+}
+
+static HDESK WINAPI Detour_OpenDesktopW(
+    LPCWSTR name, DWORD flags, BOOL inherit, ACCESS_MASK access) {
+    if (InterlockedCompareExchange(&g_killKioskActive, 0, 0) && name && g_fakeDesktopName[0]
+        && !_wcsicmp(name, g_fakeDesktopName))
+        return g_fakeDesktop;
+    return real_OpenDesktopW(name, flags, inherit, access);
+}
+
+static BOOL WINAPI Detour_CloseDesktop(HDESK hDesktop) {
+    if (InterlockedCompareExchange(&g_killKioskActive, 0, 0) && hDesktop == g_fakeDesktop)
+        return TRUE;
+    return real_CloseDesktop(hDesktop);
+}
+
+static BOOL WINAPI Detour_SwitchDesktop(HDESK hDesktop) {
+    if (InterlockedCompareExchange(&g_killKioskActive, 0, 0) && hDesktop == g_fakeDesktop)
+        return TRUE; // believe the switch, change nothing
+    return real_SwitchDesktop(hDesktop);
+}
+
+static BOOL WINAPI Detour_GetUserObjectInformationW(
+    HANDLE hObj, int nIndex, PVOID pvInfo, DWORD nLength, LPDWORD lpnLengthNeeded) {
+    if (InterlockedCompareExchange(&g_killKioskActive, 0, 0) && hObj == g_fakeDesktop
+        && nIndex == UOI_NAME && g_fakeDesktopName[0]) {
+        DWORD needed = (DWORD)(wcslen(g_fakeDesktopName) + 1) * sizeof(wchar_t);
+        if (lpnLengthNeeded) *lpnLengthNeeded = needed;
+        if (pvInfo && nLength >= needed) { memcpy(pvInfo, g_fakeDesktopName, needed); return TRUE; }
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+    return real_GUOIW(hObj, nIndex, pvInfo, nLength, lpnLengthNeeded);
+}
+
+static void StartKillKiosk() {
+    HMODULE u32 = GetModuleHandleW(L"user32.dll");
+    void* t;
+    if (u32) {
+        if (!real_CreateDesktopW && (t = GetProcAddress(u32, "CreateDesktopW")))
+            { real_CreateDesktopW = CreateDesktopW; MH_Hook(t, Detour_CreateDesktopW, &real_CreateDesktopW); MH_EnableHook(t); }
+        if (!real_CreateDesktopExW && (t = GetProcAddress(u32, "CreateDesktopExW")))
+            { real_CreateDesktopExW = CreateDesktopExW; MH_Hook(t, Detour_CreateDesktopExW, &real_CreateDesktopExW); MH_EnableHook(t); }
+        if (!real_OpenDesktopW && (t = GetProcAddress(u32, "OpenDesktopW")))
+            { real_OpenDesktopW = OpenDesktopW; MH_Hook(t, Detour_OpenDesktopW, &real_OpenDesktopW); MH_EnableHook(t); }
+        if (!real_CloseDesktop && (t = GetProcAddress(u32, "CloseDesktop")))
+            { real_CloseDesktop = CloseDesktop; MH_Hook(t, Detour_CloseDesktop, &real_CloseDesktop); MH_EnableHook(t); }
+        if (!real_SwitchDesktop && (t = GetProcAddress(u32, "SwitchDesktop")))
+            { real_SwitchDesktop = SwitchDesktop; MH_Hook(t, Detour_SwitchDesktop, &real_SwitchDesktop); MH_EnableHook(t); }
+        if (!real_GUOIW && (t = GetProcAddress(u32, "GetUserObjectInformationW")))
+            { real_GUOIW = GetUserObjectInformationW; MH_Hook(t, Detour_GetUserObjectInformationW, &real_GUOIW); MH_EnableHook(t); }
+    }
+    g_fakeDesktop = nullptr;
+    g_fakeDesktopName[0] = 0;
+    InterlockedExchange(&g_killKioskActive, 1);
+}
+
 // ── Init thread ───────────────────────────────────────────────
 static DWORD WINAPI InitThread(LPVOID) {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -385,11 +481,16 @@ static DWORD WINAPI InitThread(LPVOID) {
     h = OpenEventW(SYNCHRONIZE, FALSE, name);
     bool doBlackout = h != nullptr; if (h) CloseHandle(h);
 
+    swprintf_s(name, 128, L"Local\\NFL_KillKiosk_%lu", GetCurrentProcessId());
+    h = OpenEventW(SYNCHRONIZE, FALSE, name);
+    bool doKillKiosk = h != nullptr; if (h) CloseHandle(h);
+
     if (doFocus)     SetupFocusFix();
     if (doBypass)    StartScreenshotBypass();
     if (doPrivacy)   StartPrivacyProtection();
     if (doBlackout)  StartBlackoutProtection();
     if (doTextCopy)  EnableTextCopy();
+    if (doKillKiosk) StartKillKiosk();
     return 0;
 }
 
@@ -410,6 +511,8 @@ BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID) {
         StripAllProtection();
         DisableTextCopy();
         if (g_hwnd && g_oldProc) SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, (LONG_PTR)g_oldProc);
+        InterlockedExchange(&g_killKioskActive, 0);
+        g_fakeDesktop = nullptr;
 
         MH_DisableHook(MH_ALL_HOOKS);
         MH_Uninitialize();
