@@ -90,7 +90,7 @@ namespace NoFocusLossGUI
         }
 
         // ── Core inject helper ────────────────────────────────────────
-        private void DoInject(bool focus, bool screenshot, bool textCopy)
+        private void DoInject(bool focus, bool screenshot, bool textCopy, bool privacy)
         {
             var selected = Processes.SelectedItem as ProcessInfo;
             if (selected == null) { SetStatus("⚠ Select a process first"); return; }
@@ -101,6 +101,7 @@ namespace NoFocusLossGUI
             if (focus)      handles.Add(CreateSignal($"Local\\NFL_Focus_{selected.Id}"));
             if (screenshot) handles.Add(CreateSignal($"Local\\NFL_Bypass_{selected.Id}"));
             if (textCopy)   handles.Add(CreateSignal($"Local\\NFL_TextCopy_{selected.Id}"));
+            if (privacy)    handles.Add(CreateSignal($"Local\\NFL_Privacy_{selected.Id}"));
 
             Injector.Inject(selected, dll);
 
@@ -120,6 +121,7 @@ namespace NoFocusLossGUI
             if (focus)      parts.Add("Focus Fix");
             if (screenshot) parts.Add("Screenshot Bypass");
             if (textCopy)   parts.Add("Text Copy");
+            if (privacy)    parts.Add("Capture Exclude");
             SetStatus($"✓ Injected [{string.Join(" + ", parts)}] into {selected}");
         }
 
@@ -128,11 +130,12 @@ namespace NoFocusLossGUI
             return new EventWaitHandle(true, EventResetMode.ManualReset, name);
         }
 
-        // ── Three inject buttons ──────────────────────────────────────
-        private void InjectFocus(object s, RoutedEventArgs e)      => DoInject(focus: true,  screenshot: false, textCopy: false);
-        private void InjectScreenshot(object s, RoutedEventArgs e) => DoInject(focus: false, screenshot: true,  textCopy: false);
-        private void InjectTextCopy(object s, RoutedEventArgs e)   => DoInject(focus: false, screenshot: false, textCopy: true);
-        private void InjectBoth(object s, RoutedEventArgs e)       => DoInject(focus: true,  screenshot: true,  textCopy: true);
+        // ── Inject buttons ───────────────────────────────────────────
+        private void InjectFocus(object s, RoutedEventArgs e)      => DoInject(focus: true,  screenshot: false, textCopy: false, privacy: false);
+        private void InjectScreenshot(object s, RoutedEventArgs e) => DoInject(focus: false, screenshot: true,  textCopy: false, privacy: false);
+        private void InjectTextCopy(object s, RoutedEventArgs e)   => DoInject(focus: false, screenshot: false, textCopy: true,  privacy: false);
+        private void InjectPrivacy(object s, RoutedEventArgs e)    => DoInject(focus: false, screenshot: false, textCopy: false, privacy: true);
+        private void InjectBoth(object s, RoutedEventArgs e)       => DoInject(focus: true,  screenshot: true,  textCopy: true,  privacy: false);
 
         // ── Unload ────────────────────────────────────────────────────
         private void Unload(object s, RoutedEventArgs e)

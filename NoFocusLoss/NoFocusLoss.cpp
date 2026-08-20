@@ -10,6 +10,10 @@
 #define WDA_NONE 0x00000000
 #endif
 
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+
 // ── GetMainWindow ─────────────────────────────────────────────
 struct EnumWndArgs { HWND hwnd = nullptr; int area = -1; };
 static BOOL CALLBACK _EnumWndCb(HWND h, LPARAM lp) {
@@ -50,8 +54,10 @@ static decltype(SetWindowDisplayAffinity)* real_SWDA      = nullptr;
 static decltype(EmptyClipboard)*           real_Empty     = nullptr;
 
 static volatile LONG g_bypassActive  = 0;
+static volatile LONG g_privacyActive = 0;
 static volatile LONG g_textCopyActive = 0;
 static HANDLE        g_bypassThread  = nullptr;
+static HANDLE        g_privacyThread = nullptr;
 
 // ── UI Automation Helper ──────────────────────────────────────
 static void GetTextViaUIA(HWND owner) {
@@ -233,9 +239,21 @@ static void SetupFocusFix() {
         g_oldProc = (WNDPROC)SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)NewWndProc);
 }
 
-// ── Screenshot bypass ─────────────────────────────────────────
+// ── Screen-capture affinity (shared by Bypass Screenshot & Exclude from Capture) ──
 static BOOL WINAPI Detour_SWDA(HWND hWnd, DWORD) {
-    if (real_SWDA) real_SWDA(hWnd, WDA_NONE); return TRUE;
+    if (real_SWDA) {
+        // Exclude-from-Capture wins if both are somehow active; otherwise follow Bypass.
+        if (InterlockedCompareExchange(&g_privacyActive, 0, 0)) real_SWDA(hWnd, WDA_EXCLUDEFROMCAPTURE);
+        else                                                     real_SWDA(hWnd, WDA_NONE);
+    }
+    return TRUE;
+}
+static void InstallSWDAHook() {
+    HMODULE u32 = GetModuleHandleW(L"user32.dll");
+    if (u32 && !real_SWDA) {
+        void* t = GetProcAddress(u32, "SetWindowDisplayAffinity");
+        if (t) { real_SWDA = SetWindowDisplayAffinity; MH_Hook(t, Detour_SWDA, &real_SWDA); MH_EnableHook(t); }
+    }
 }
 static BOOL CALLBACK _ResetChild(HWND h, LPARAM) { SetWindowDisplayAffinity(h, WDA_NONE); return TRUE; }
 static void StripAllProtection() {
@@ -251,11 +269,7 @@ static DWORD WINAPI BypassThread(LPVOID) {
     return 0;
 }
 static void StartScreenshotBypass() {
-    HMODULE u32 = GetModuleHandleW(L"user32.dll");
-    if (u32 && !real_SWDA) {
-        void* t = GetProcAddress(u32, "SetWindowDisplayAffinity");
-        if (t) { real_SWDA = SetWindowDisplayAffinity; MH_Hook(t, Detour_SWDA, &real_SWDA); MH_EnableHook(t); }
-    }
+    InstallSWDAHook();
     StripAllProtection();
     if (InterlockedExchange(&g_bypassActive, 1) == 0)
         g_bypassThread = CreateThread(nullptr, 0, BypassThread, nullptr, 0, nullptr);
@@ -263,9 +277,32 @@ static void StartScreenshotBypass() {
 static void StopScreenshotBypass() {
     InterlockedExchange(&g_bypassActive, 0);
     if (g_bypassThread) { WaitForSingleObject(g_bypassThread, 1500); CloseHandle(g_bypassThread); g_bypassThread = nullptr; }
-    HMODULE u32 = GetModuleHandleW(L"user32.dll");
-    if (u32) { void* t = GetProcAddress(u32, "SetWindowDisplayAffinity"); if (t) MH_DisableHook(t); }
-    real_SWDA = nullptr;
+}
+
+// ── Exclude from capture (privacy) ────────────────────────────
+static BOOL CALLBACK _ExcludeChild(HWND h, LPARAM) { SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE); return TRUE; }
+static void ExcludeAllFromCapture() {
+    DWORD pid = GetCurrentProcessId();
+    EnumWindows([](HWND h, LPARAM pid) -> BOOL {
+        DWORD wp = 0; GetWindowThreadProcessId(h, &wp);
+        if (wp == (DWORD)pid) { SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE); EnumChildWindows(h, _ExcludeChild, 0); }
+        return TRUE;
+    }, (LPARAM)pid);
+}
+static DWORD WINAPI PrivacyThread(LPVOID) {
+    while (InterlockedCompareExchange(&g_privacyActive, 0, 0)) { ExcludeAllFromCapture(); Sleep(250); }
+    return 0;
+}
+static void StartPrivacyProtection() {
+    InstallSWDAHook();
+    InterlockedExchange(&g_privacyActive, 1);
+    ExcludeAllFromCapture();
+    if (!g_privacyThread)
+        g_privacyThread = CreateThread(nullptr, 0, PrivacyThread, nullptr, 0, nullptr);
+}
+static void StopPrivacyProtection() {
+    InterlockedExchange(&g_privacyActive, 0);
+    if (g_privacyThread) { WaitForSingleObject(g_privacyThread, 1500); CloseHandle(g_privacyThread); g_privacyThread = nullptr; }
 }
 
 // ── Init thread ───────────────────────────────────────────────
@@ -286,9 +323,14 @@ static DWORD WINAPI InitThread(LPVOID) {
     h = OpenEventW(SYNCHRONIZE, FALSE, name);
     bool doTextCopy = h != nullptr; if (h) CloseHandle(h);
 
-    if (doFocus)    SetupFocusFix();
-    if (doBypass)   StartScreenshotBypass();
-    if (doTextCopy) EnableTextCopy();
+    swprintf_s(name, 128, L"Local\\NFL_Privacy_%lu", GetCurrentProcessId());
+    h = OpenEventW(SYNCHRONIZE, FALSE, name);
+    bool doPrivacy = h != nullptr; if (h) CloseHandle(h);
+
+    if (doFocus)     SetupFocusFix();
+    if (doBypass)    StartScreenshotBypass();
+    if (doPrivacy)   StartPrivacyProtection();
+    if (doTextCopy)  EnableTextCopy();
     return 0;
 }
 
@@ -302,6 +344,7 @@ BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID) {
     }
     else if (reason == DLL_PROCESS_DETACH) {
         StopScreenshotBypass();
+        StopPrivacyProtection();
         InterlockedExchange(&g_textCopyActive, 0);
         if (g_hwnd && g_oldProc) SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)g_oldProc);
         MH_DisableHook(MH_ALL_HOOKS);

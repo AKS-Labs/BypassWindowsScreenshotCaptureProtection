@@ -14,7 +14,9 @@
 |---|---|
 | 🎮 **Fix Focus Loss** | Prevents games and apps from pausing, muting, or losing controller input when you alt-tab |
 | 📷 **Bypass Screenshot** | Removes the black-screen protection so Snipping Tool, OCR (`Win+Shift+T`), and screen recorders can capture the window |
-| ✨ **Both Features** | Applies both at once |
+| 🔒 **Exclude from Capture** | Privacy: forces the window black/blank in all screenshots, captures, and screen-share tools (Zoom, Meet, Teams, OBS…) while staying visible on screen |
+| 📋 **Enable Text Copy** | Lets you copy text from apps that block it (Ctrl+C on protected fields/browsers) |
+| ✨ **All Features** | Applies focus fix + screenshot bypass + text copy at once |
 
 Each feature can be injected **independently** — use only what you need.
 
@@ -39,10 +41,12 @@ SharpestInjector.dll    ← Injector library (don't move)
 1. **Run** `NoFocusLossGUI.exe` (as Administrator if targeting elevated processes)
 2. Click **Refresh** to list running windowed processes
 3. Select the target process
-4. Click one of the three inject buttons:
+4. Click one of the inject buttons:
    - 🟢 **Fix Focus Loss** — stops the app from pausing/muting when unfocused
    - 🟣 **Bypass Screenshot** — removes black-screen capture protection
-   - 🔵 **Both Features** — applies both
+   - 🔴 **Exclude from Capture** — makes the app invisible to screenshots and screen-sharing
+   - 🟠 **Enable Text Copy** — copies text from apps that block selection/copying
+   - 🔵 **All Features** — applies focus fix, screenshot bypass, and text copy at once
 5. To revert, select the process in the bottom list and click **Unload**
 
 ---
@@ -53,6 +57,7 @@ SharpestInjector.dll    ← Injector library (don't move)
 - **Controller gaming in background** — play with a controller while the game window is not focused (XInput games only)
 - **VR games with bad input handling** — bypass Unity's requirement that the window be focused for input
 - **App developers / testers** — bypass screenshot protection you added to your own apps for testing purposes (OCR, screen capture, visual regression tests, etc.)
+- **Privacy during sharing** — keep chat apps, notes, or sensitive data hidden from screen recordings/shares without minimising them
 - **Cutscene skipping** — alt-tab freely without cutscenes pausing
 
 ---

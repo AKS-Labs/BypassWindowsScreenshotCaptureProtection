@@ -2,10 +2,12 @@
 
 ## Overview
 
-Mithya is a Windows DLL injection tool with two independent features:
+Mithya is a Windows DLL injection tool with several independent features:
 
 1. **Fix Focus Loss** — Prevents games/apps from pausing or muting when they lose focus
 2. **Bypass Screenshot** — Removes screenshot protection so capture tools (Snipping Tool, OCR, etc.) can see the window
+3. **Exclude from Capture** — Forces `WDA_EXCLUDEFROMCAPTURE` so the app appears black/blank in any capture or screen share
+4. **Enable Text Copy** — Lets you copy text from apps that block it
 
 ---
 
@@ -30,6 +32,8 @@ The GUI creates Windows Named Events in the Local namespace before injecting:
 |---|---|
 | Fix Focus Loss | `Local\NFL_Focus_{PID}` |
 | Bypass Screenshot | `Local\NFL_Bypass_{PID}` |
+| Exclude from Capture | `Local\NFL_Privacy_{PID}` |
+| Enable Text Copy | `Local\NFL_TextCopy_{PID}` |
 
 These are signalled (set to `true`) so the DLL can open and read them.
 
@@ -54,6 +58,7 @@ DllMain (DLL_PROCESS_ATTACH)
             └── Sleep(100ms)     ← Wait for LoadLibrary to fully return
             └── OpenEvent("Local\NFL_Focus_{PID}")   → SetupFocusFix()
             └── OpenEvent("Local\NFL_Bypass_{PID}")  → StartScreenshotBypass()
+            └── OpenEvent("Local\NFL_Privacy_{PID}") → StartPrivacyProtection()
 ```
 
 > **Why a separate thread?** Doing complex operations directly in `DllMain` can deadlock because Windows holds the loader lock during DLL loading. Spawning a thread and waiting 100ms avoids this safely.
@@ -121,6 +126,32 @@ Background Thread (250ms loop)
 
 ---
 
+## Feature 3: Exclude from Capture (Privacy)
+
+### The Problem
+
+Normally every window you see is also visible to anything that captures the screen — screenshots, screen recorders, and screen-sharing tools (Zoom, Meet, Teams, OBS). There's no built-in UI to hide a single window from captures while still seeing it yourself.
+
+### The Solution
+
+Windows exposes `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` — the DWM then renders that window as a black rectangle in *any* capture, while it keeps displaying normally on the real screen. This is exactly what DRM video players use. Mithya simply force-applies it, the mirror of **Feature 2**:
+
+**A. Force the flag on every window**
+
+After injection, `ExcludeAllFromCapture()` enumerates all windows belonging to the process (including children) and sets `WDA_EXCLUDEFROMCAPTURE` on each.
+
+**B. Hook `SetWindowDisplayAffinity`**
+
+Apps that try to clear protection (call with `WDA_NONE`) are intercepted — the detour always re-applies `WDA_EXCLUDEFROMCAPTURE` instead. The same hook serves both features: when privacy is active it forces `WDA_EXCLUDEFROMCAPTURE`, when screenshot-bypass is active it forces `WDA_NONE`, and if both flags were set privacy wins.
+
+**C. Background Keep-Alive Thread**
+
+Some apps periodically reset the affinity. A background thread re-applies `WDA_EXCLUDEFROMCAPTURE` every 250 ms for the lifetime of the injection.
+
+> **Note:** Exclude-from-Capture and Bypass-Screenshot are exact opposites. Pick **one** per process — the GUI moves the process to the *Injected* list after the first injection, so you'd have to unload before switching.
+
+---
+
 ## How Named Event IPC Works
 
 The GUI and DLL communicate through the Windows kernel object namespace:
@@ -130,12 +161,15 @@ GUI Process                           Target Process
     │                                      │
     ├─ CreateEvent("NFL_Focus_{PID}")       │
     ├─ CreateEvent("NFL_Bypass_{PID}")      │
+    ├─ CreateEvent("NFL_Privacy_{PID}")     │
     ├─ Inject DLL ───────────────────────► │
     │                                      ├─ InitThread starts
     │                                      ├─ OpenEvent("NFL_Focus_{PID}")  ✓ found
     │                                      ├─ OpenEvent("NFL_Bypass_{PID}") ✓ found
+    │                                      ├─ OpenEvent("NFL_Privacy_{PID}") ✓ found
     │                                      ├─ SetupFocusFix()
-    │                                      └─ StartScreenshotBypass()
+    │                                      ├─ StartScreenshotBypass()
+    │                                      └─ StartPrivacyProtection()
     ├─ Sleep 2000ms
     └─ CloseHandle (events auto-deleted by OS when no handles remain)
 ```
