@@ -77,8 +77,18 @@ namespace NoFocusLossGUI
             foreach (var proc in Process.GetProcesses())
             {
                 var info = Injector.GetProcessInfo(proc);
-                if (info.Modules.Count == 0 || info.WindowHandle == IntPtr.Zero) continue;
-                info.FileName = Path.GetFileName(info.Modules.First().Value.Path);
+                if (info.WindowHandle == IntPtr.Zero) continue;
+
+                if (info.Modules.Count > 0)
+                {
+                    info.FileName = Path.GetFileName(info.Modules.First().Value.Path);
+                    info.Note = info.Is64Bit ? "64-bit" : "32-bit";
+                }
+                else
+                {
+                    info.FileName = TryGetMainModuleName(proc) ?? (proc.ProcessName + ".exe");
+                    info.Note = "admin required";
+                }
                 ProcessBindTest.Add(info);
             }
 
@@ -94,6 +104,14 @@ namespace NoFocusLossGUI
         {
             var selected = Processes.SelectedItem as ProcessInfo;
             if (selected == null) { SetStatus("⚠ Select a process first"); return; }
+
+            if (!selected.Accessible)
+            {
+                SetStatus(IsElevated()
+                    ? $"⚠ Cannot read {selected} — the process is protected. Injection is not possible."
+                    : $"⚠ {selected} looks elevated — restart Mithya as Administrator to inject into it");
+                return;
+            }
 
             PeFile dll = selected.Is64Bit ? Dll64 : Dll32;
             var handles = new List<EventWaitHandle>();
@@ -173,5 +191,18 @@ namespace NoFocusLossGUI
 
         // ── Helpers ───────────────────────────────────────────────────
         private void SetStatus(string msg) => StatusText.Text = msg;
+
+        private static string TryGetMainModuleName(Process proc)
+        {
+            try { return Path.GetFileName(proc.MainModule?.FileName); }
+            catch { return null; }
+        }
+
+        private static bool IsElevated()
+        {
+            var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
     }
 }
