@@ -1,5 +1,7 @@
-# NoFocusLoss
+# Mithya
 
+> Make the application believe a different reality.
+>
 > A Windows DLL injection utility that keeps apps running normally when unfocused, and optionally bypasses screenshot/capture protection.
 
 ![GitHub Actions](https://github.com/AKS-Labs/BypassWindowsSCreenshotDetection/actions/workflows/build.yml/badge.svg)
@@ -20,7 +22,7 @@ Each feature can be injected **independently** — use only what you need.
 
 ## Download
 
-Go to [**Actions**](../../actions) → latest successful build → download **`NoFocusLoss-Release`** artifact.
+Go to [**Actions**](../../actions) → latest successful build → download **`Mithya-Release`** artifact.
 
 Extract the zip. You'll get:
 ```

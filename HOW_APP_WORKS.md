@@ -1,8 +1,8 @@
-# How NoFocusLoss Works
+# How Mithya Works
 
 ## Overview
 
-NoFocusLoss is a Windows DLL injection tool with two independent features:
+Mithya is a Windows DLL injection tool with two independent features:
 
 1. **Fix Focus Loss** — Prevents games/apps from pausing or muting when they lose focus
 2. **Bypass Screenshot** — Removes screenshot protection so capture tools (Snipping Tool, OCR, etc.) can see the window

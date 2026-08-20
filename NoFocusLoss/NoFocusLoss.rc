@@ -68,12 +68,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "araghon007"
-            VALUE "FileDescription", "Hook that prevents certain windows from losing focus"
+            VALUE "FileDescription", "Make the application believe a different reality."
             VALUE "FileVersion", "0.1.0.0"
             VALUE "InternalName", "NoFocusLoss.dll"
             VALUE "LegalCopyright", ""
             VALUE "OriginalFilename", "NoFocusLoss.dll"
-            VALUE "ProductName", "NoFocusLoss"
+            VALUE "ProductName", "Mithya"
             VALUE "ProductVersion", "0.1.0.0"
         END
     END

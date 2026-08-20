@@ -1,4 +1,4 @@
-name: Build NoFocusLoss
+name: Build Mithya
 
 on:
   push:
@@ -43,5 +43,5 @@ jobs:
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NoFocusLoss-Release
+        name: Mithya-Release
         path: build_output/
