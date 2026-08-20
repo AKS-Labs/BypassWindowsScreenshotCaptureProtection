@@ -15,7 +15,7 @@
 | 🎮 **Fix Focus Loss** | Prevents games and apps from pausing, muting, or losing controller input when you alt-tab |
 | 📷 **Bypass Screenshot** | Removes the black-screen protection so Snipping Tool, OCR (`Win+Shift+T`), and screen recorders can capture the window |
 | 🔒 **Exclude from Capture** | Privacy: removes the window from captures entirely (region shows what's behind it) while it stays visible on screen |
-| 🛡 **Screen Capture Protection** | Blackout: forces a black rectangle over the app in every capture/screen share (classic DRM style) while it stays visible on screen |
+| 🛡 **Blackout in Captures** | Shows a black rectangle over the app in every capture/screen share (classic DRM style) while it stays visible on screen |
 | 📋 **Enable Text Copy** | Lets you copy text from apps that block it (Ctrl+C on protected fields/browsers) |
 | ✨ **All Features** | Applies focus fix + screenshot bypass + text copy at once |
 
@@ -46,7 +46,7 @@ SharpestInjector.dll    ← Injector library (don't move)
    - 🟢 **Fix Focus Loss** — stops the app from pausing/muting when unfocused
    - 🟣 **Bypass Screenshot** — removes black-screen capture protection
    - 🔴 **Exclude from Capture** — makes the app "invisible" in screenshots/screen-sharing (behind-content shows through)
-   - 🛡 **Screen Capture Protection** — makes the app show as a **black box** in screenshots/screen-sharing
+   - 🛡 **Blackout in Captures** — makes the app show as a **black box** in screenshots/screen-sharing
    - 🟠 **Enable Text Copy** — copies text from apps that block selection/copying
    - 🔵 **All Features** — applies focus fix, screenshot bypass, and text copy at once
 5. To revert, select the process in the bottom list and click **Unload**
